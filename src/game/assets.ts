@@ -22,6 +22,7 @@ const SPEC = [
   { name: "mara", src: gameSrc("mara.png"), cols: 1, rows: 1, trim: true },
   { name: "vendor", src: gameSrc("vendor.png"), cols: 1, rows: 1, trim: true },
   { name: "lira", src: gameSrc("lira.png"), cols: 1, rows: 1, trim: true },
+  { name: "trainer", src: gameSrc("trainer.png"), cols: 1, rows: 1, trim: true },
   { name: "tree", src: gameSrc("tree.png"), cols: 1, rows: 1, trim: true },
   { name: "cottage", src: gameSrc("cottage.png"), cols: 1, rows: 1, trim: true },
   { name: "well", src: gameSrc("well.png"), cols: 1, rows: 1, trim: true },

@@ -191,6 +191,7 @@ export const NPCS: Spot[] = [
   { id: "mara", name: "Wächterin Mara", sprite: "mara", ...tileCenter(16, 28) },
   { id: "halden", name: "Halden", sprite: "vendor", ...tileCenter(10, 29) },
   { id: "lira", name: "Heilerin Lira", sprite: "lira", ...tileCenter(21, 29) },
+  { id: "bronn", name: "Klassenlehrer Bronn", sprite: "trainer", ...tileCenter(18, 32) },
 ];
 
 export const DUMMY = { ...tileCenter(12, 33), id: "dummy", name: "Übungspuppe" };

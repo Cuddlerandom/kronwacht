@@ -479,6 +479,45 @@
   background-size: 400% 300%;
 }
 
+.kw-spellicon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  border-radius: 0.25rem;
+}
+
+.kw-lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.kw-lesson {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+  text-align: left;
+}
+
+.kw-lesson .kw-spellicon {
+  position: static;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.kw-lesson p {
+  margin: 0.1rem 0 0.25rem;
+  color: var(--color-parchment-dim, #cbbba4);
+  font-size: 0.82rem;
+}
+
+.kw-lesson button {
+  width: 100%;
+}
+
 .i0 { background-position: 0% 0%; }
 .i1 { background-position: 33.333% 0%; }
 .i2 { background-position: 66.666% 0%; }

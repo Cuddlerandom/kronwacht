@@ -398,6 +398,10 @@ export const SPEC_SPELLS: Record<Spec, SpellDef[]> = {
   licht: LICHT,
 };
 
+/** WoW-artig: eine Fähigkeit von Anfang an, der Rest beim Klassenlehrer. */
+export const SPELL_RANK = [1, 2, 4, 6];
+export const SPELL_PRICE = [0, 50, 180, 450];
+
 export interface QuestDef {
   id: "wolves" | "herbs" | "bandits";
   title: string;
@@ -495,4 +499,5 @@ export const GOSSIP: Record<string, string> = {
   mara: "Ich halte diese Straße, seit das alte Tor schwieg. Kronwacht ist kein Reich mehr. Nur ein Versprechen zwischen den Eichen.",
   halden: "Brot, Wasser, Stahl. Was die Wacht braucht, liegt in der Kiste. Was sie nicht braucht, kaufe ich trotzdem.",
   lira: "Die Wunden hier sind klein, bis sie es nicht mehr sind. Komm, bevor das Blut die Entscheidung trifft.",
+  bronn: "Eine Fähigkeit reicht, um anzufangen. Den Rest lernst du hier, wenn Stufe und Münze stimmen.",
 };

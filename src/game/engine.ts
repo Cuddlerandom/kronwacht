@@ -2,10 +2,13 @@ import { readyArt } from "@/game/assets";
 import { sfx, setMuted } from "@/game/audio";
 import {
   GREEN_WEAPON,
+  GOSSIP,
   ITEMS,
   QUESTS,
   SPEC_META,
   SPEC_SPELLS,
+  SPELL_PRICE,
+  SPELL_RANK,
   STARTER_WEAPON,
   WHITE_WEAPON,
   armorOf,
@@ -36,7 +39,7 @@ import {
   zoneName,
 } from "@/game/world";
 
-export type Panel = null | "bag" | "char" | "quest" | "vendor" | "dialog" | "loot" | "death";
+export type Panel = null | "bag" | "char" | "quest" | "vendor" | "dialog" | "loot" | "death" | "train";
 type QuestId = QuestDef["id"];
 type QStore = Partial<Record<QuestId, "active" | "done">>;
 
@@ -50,6 +53,17 @@ export interface HudSpell {
   oom: boolean;
   desc: string;
   ready: boolean;
+  index: number;
+}
+
+export interface HudLesson {
+  id: string;
+  name: string;
+  icon: number;
+  level: number;
+  cost: number;
+  blurb: string;
+  state: "known" | "ready" | "gold" | "level";
 }
 
 export interface Hud {
@@ -83,6 +97,7 @@ export interface Hud {
     sprite: string;
   };
   spells: HudSpell[];
+  lessons: HudLesson[];
   tracker: { title: string; lines: string[]; ready: boolean }[];
   log: { text: string; kind: string }[];
   panel: Panel;
@@ -169,6 +184,7 @@ let weaponId: string | null = "stumpf";
 let chestId: string | null = null;
 let bag: (BagStack | null)[] = Array.from({ length: 16 }, () => null);
 let quests: QStore = {};
+let known = new Set<string>();
 let kills = { wolf: 0, bandit: 0 };
 let dead = false;
 let ghost = false;
@@ -255,6 +271,7 @@ function blankHud(): Hud {
     casting: null,
     target: null,
     spells: [],
+    lessons: [],
     tracker: [],
     log: [],
     panel: null,
@@ -360,6 +377,10 @@ function qState(id: QuestId): "locked" | "available" | "active" | "ready" | "don
   return "available";
 }
 function markFor(npc: string): "!" | "?" | null {
+  if (npc === "bronn") {
+    const open = SPEC_SPELLS[spec].some((spell, i) => !known.has(spell.id) && level >= (SPELL_RANK[i] ?? 1));
+    return open ? "!" : null;
+  }
   let bang = false;
   for (const q of QUESTS) {
     if (q.giver !== npc) continue;
@@ -447,6 +468,7 @@ function freshPlayer(nextName: string, nextSpec: Spec) {
   chestId = null;
   bag = Array.from({ length: 16 }, () => null);
   quests = {};
+  known = new Set([SPEC_SPELLS[nextSpec][0]!.id]);
   kills = { wolf: 0, bandit: 0 };
   gold = 0;
   hp = hpMax();
@@ -606,6 +628,7 @@ interface SaveFile {
   weapon: string | null;
   chest: string | null;
   quests: QStore;
+  known: string[];
   kills: { wolf: number; bandit: number };
   dead: boolean;
   ghost: boolean;
@@ -629,6 +652,7 @@ function snapshot(): SaveFile {
     weapon: weaponId,
     chest: chestId,
     quests,
+    known: [...known],
     kills,
     dead,
     ghost,
@@ -650,6 +674,8 @@ function applySave(p: SaveFile) {
   chestId = p.chest;
   bag = Array.from({ length: 16 }, (_, i) => p.bag?.[i] ?? null);
   quests = p.quests ?? {};
+  known = new Set(p.known?.length ? p.known : [SPEC_SPELLS[spec][0]!.id]);
+  known.add(SPEC_SPELLS[spec][0]!.id);
   kills = p.kills ?? { wolf: 0, bandit: 0 };
   dead = Boolean(p.dead);
   ghost = Boolean(p.ghost);
@@ -809,7 +835,7 @@ export function pressSpell(index: number) {
     return;
   }
   const spell = SPEC_SPELLS[spec][index];
-  if (!spell) return;
+  if (!spell || !known.has(spell.id)) return;
   if ((cds[spell.id] ?? 0) > 0 || gcd > 0) {
     popSelf("Noch nicht bereit", "info");
     return;
@@ -833,6 +859,38 @@ export function pressSpell(index: number) {
     }
   }
   beginSpell(spell, spell.range > 0 ? targetId : null);
+}
+
+export function pressSlot(slot: number) {
+  const list = SPEC_SPELLS[spec].map((spell, index) => ({ spell, index })).filter(({ spell }) => known.has(spell.id));
+  const hit = list[slot];
+  if (!hit) return;
+  pressSpell(hit.index);
+}
+
+export function learnSpell(id: string) {
+  const list = SPEC_SPELLS[spec];
+  const i = list.findIndex((spell) => spell.id === id);
+  const spell = list[i];
+  if (!spell || known.has(spell.id)) return;
+  const need = SPELL_RANK[i] ?? 1;
+  const price = SPELL_PRICE[i] ?? 0;
+  if (level < need) {
+    say(`Dafür brauchst du Stufe ${need}.`, "bad");
+    publish();
+    return;
+  }
+  if (gold < price) {
+    say("Zu wenig Kupfer.", "bad");
+    publish();
+    return;
+  }
+  gold -= price;
+  known.add(spell.id);
+  say(`${spell.name} gelernt.`, "good");
+  sfx.level();
+  markDirty();
+  publish();
 }
 
 function beginSpell(spell: SpellDef, target: string | null) {
@@ -1007,6 +1065,8 @@ function addXp(n: number) {
     hp = hpMax();
     rp = rpMax();
     say(`Stufe auf! Du bist jetzt Stufe ${level}.`, "good");
+    const next = SPEC_SPELLS[spec].find((spell, i) => (SPELL_RANK[i] ?? 1) === level && !known.has(spell.id));
+    if (next) say(`${next.name} wartet bei Klassenlehrer Bronn.`, "good");
     popSelf(`Stufe ${level}`, "gold");
     sfx.level();
   }
@@ -1171,6 +1231,11 @@ export function dialogClick(id: string) {
     publish();
     return;
   }
+  if (id === "train") {
+    panel = "train";
+    publish();
+    return;
+  }
   const [kind, qid] = id.split(":") as [string, QuestId];
   const q = QUESTS.find((quest) => quest.id === qid);
   if (!q) return;
@@ -1198,9 +1263,7 @@ export function dialogClick(id: string) {
 }
 
 function gossipLine(id: string) {
-  if (id === "mara") return "Ich halte diese Straße, seit das alte Tor schwieg. Kronwacht ist kein Reich mehr, nur ein Versprechen zwischen den Eichen.";
-  if (id === "halden") return "Brot, Wasser, Stahl. Was die Wacht braucht, liegt in der Kiste.";
-  return "Komm, bevor das Blut die Entscheidung trifft.";
+  return GOSSIP[id] ?? "Komm, bevor das Blut die Entscheidung trifft.";
 }
 
 function finishQuest(q: QuestDef) {
@@ -1673,7 +1736,7 @@ export function drawModel(): DrawModel {
       hostile: false,
       dead: false,
       showBar: false,
-      mark: markFor(n.id === "halden" ? "" : n.id === "mara" ? "mara" : "lira"),
+      mark: markFor(n.id),
       selected: selected === n.id,
       hitH: 108,
     });
@@ -1737,19 +1800,35 @@ export function portraitSprite() {
 function buildHud(): Hud {
   const meta = SPEC_META[spec];
   const wpn = item(weaponId);
-  const spells = (phase === "play" ? SPEC_SPELLS[spec] : []).map((spell) => {
-    const cd = cds[spell.id] ?? 0;
-    return {
-      name: spell.name,
-      icon: spell.icon,
-      cd,
-      cdMax: Math.max(spell.cd, 1),
-      gcd,
-      cost: spell.cost,
-      oom: rp < spell.cost,
-      desc: `${spell.blurb} ${estimate(spell)}. ${spell.cast ? `${spell.cast.toFixed(1)}s Zauber. ` : ""}${spell.cost ? `${spell.cost} ${meta.resource}.` : ""}`,
-      ready: cd <= 0 && gcd <= 0 && rp >= spell.cost,
-    };
+  const spells = (phase === "play" ? SPEC_SPELLS[spec] : [])
+    .map((spell, index) => ({ spell, index }))
+    .filter(({ spell }) => known.has(spell.id))
+    .map(({ spell, index }) => {
+      const cd = cds[spell.id] ?? 0;
+      return {
+        name: spell.name,
+        icon: spell.icon,
+        cd,
+        cdMax: Math.max(spell.cd, 1),
+        gcd,
+        cost: spell.cost,
+        oom: rp < spell.cost,
+        desc: `${spell.blurb} ${estimate(spell)}. ${spell.cast ? `${spell.cast.toFixed(1)}s Zauber. ` : ""}${spell.cost ? `${spell.cost} ${meta.resource}.` : ""}`,
+        ready: cd <= 0 && gcd <= 0 && rp >= spell.cost,
+        index,
+      };
+    });
+  const lessons: HudLesson[] = SPEC_SPELLS[spec].map((spell, i) => {
+    const need = SPELL_RANK[i] ?? 1;
+    const cost = SPELL_PRICE[i] ?? 0;
+    const state: HudLesson["state"] = known.has(spell.id)
+      ? "known"
+      : level < need
+        ? "level"
+        : gold < cost
+          ? "gold"
+          : "ready";
+    return { id: spell.id, name: spell.name, icon: spell.icon, level: need, cost, blurb: spell.blurb, state };
   });
   const tracker = QUESTS.filter((q) => quests[q.id] === "active").map((q) => {
     const have = q.id === "wolves" ? kills.wolf : q.id === "bandits" ? kills.bandit : countItem("silberblatt");
@@ -1762,7 +1841,7 @@ function buildHud(): Hud {
     };
   });
   if (!tracker.length && phase === "play") {
-    tracker.push({ title: "Lindenhain", ready: false, lines: ["Such das gelbe !"] });
+    tracker.push({ title: "Lindenhain", ready: false, lines: ["Gelbes ! bei Mara, Lira oder Bronn"] });
   }
   const tgt = mobBy(targetId);
   const npc = npcBy(targetId);
@@ -1795,6 +1874,7 @@ function buildHud(): Hud {
         ? { name: npc.name, level: 0, hp: 1, hpMax: 1, hostile: false, sprite: npc.sprite }
         : null,
     spells,
+    lessons,
     tracker,
     log: log.slice(0, 6),
     panel,
@@ -1870,7 +1950,16 @@ function dialogView(): Hud["dialog"] {
     else if (s === "active") buttons.push({ id: `progress:${q.id}`, label: q.title });
   }
   if (dialogNpc === "halden") buttons.push({ id: "trade", label: "Handel" });
+  if (dialogNpc === "bronn") buttons.push({ id: "train", label: "Ausbilden" });
   buttons.push({ id: "gossip", label: "Wer bist du?" });
   buttons.push({ id: "bye", label: "Leb wohl" });
-  return { name: title, text: "Die Straße ist ruhig, bis sie es nicht mehr ist.", buttons };
+  const text =
+    dialogNpc === "bronn"
+      ? GOSSIP.bronn
+      : dialogNpc === "mara"
+        ? "Die Wölfe rücken näher an den Hof."
+        : dialogNpc === "lira"
+          ? "Die Kräuter am Bach warten nicht."
+          : "Die Straße ist ruhig, bis sie es nicht mehr ist.";
+  return { name: title, text, buttons };
 }

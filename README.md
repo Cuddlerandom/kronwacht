@@ -31,4 +31,4 @@ Die App läuft dann auf Port 8080.
 | Farben und Handy-Layout | `src/styles.css` |
 | Figuren und Kacheln | `public/game/` |
 
-Drei Wege: **Klinge**, **Flamme**, **Licht**. Die Zone heißt Lindenhain.
+Drei Wege: **Klinge**, **Flamme**, **Licht**. Du startest mit einer Fähigkeit. Klassenlehrer Bronn im Dorf lehrt den Rest gegen Stufe und Kupfer. Die Zone heißt Lindenhain.

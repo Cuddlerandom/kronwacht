@@ -63,6 +63,7 @@ const HEIGHT: Record<string, number> = {
   mara: 114,
   vendor: 110,
   lira: 114,
+  trainer: 124,
   dummy: 102,
   tree: 178,
   cottage: 170,

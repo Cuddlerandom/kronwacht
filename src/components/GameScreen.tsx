@@ -17,11 +17,13 @@ import {
   getY,
   getYaw,
   interactNearest,
+  learnSpell,
   leave,
   newGame,
   noteArt,
   playerPoint,
   portraitSprite,
+  pressSlot,
   pressSpell,
   release,
   rez,
@@ -40,6 +42,7 @@ import {
   abandon,
 } from "@/game/engine";
 import { drawMinimap, drawPortrait, drawWorld } from "@/game/render";
+import { SpellIcon } from "@/game/spell-icon";
 
 if (typeof document !== "undefined") {
   document.documentElement.style.setProperty(
@@ -154,10 +157,10 @@ export function GameScreen() {
       keys.current.add(e.code);
       setHeld(keys.current);
       if (GAME_KEYS.has(e.code)) e.preventDefault();
-      if (e.code === "Digit1") pressSpell(0);
-      if (e.code === "Digit2") pressSpell(1);
-      if (e.code === "Digit3") pressSpell(2);
-      if (e.code === "Digit4") pressSpell(3);
+      if (e.code === "Digit1") pressSlot(0);
+      if (e.code === "Digit2") pressSlot(1);
+      if (e.code === "Digit3") pressSlot(2);
+      if (e.code === "Digit4") pressSlot(3);
       if (e.code === "Tab") tabTarget();
       if (e.code === "KeyB") togglePanel("bag");
       if (e.code === "KeyC") togglePanel("char");
@@ -403,7 +406,7 @@ export function GameScreen() {
           </div>
           {hud.banner && <div className="kw-banner">{hud.banner}</div>}
           {hud.hint && (
-            <p className="kw-hint">Tippe zum Laufen. Tippe Gegner an, um anzugreifen. Gelbes ! ist ein Auftrag.</p>
+            <p className="kw-hint">Eine Fähigkeit am Start. Bronn im Dorf lehrt den Rest. Gelbes ! ist Auftrag oder Ausbildung.</p>
           )}
           <div
             className="kw-stick"
@@ -457,7 +460,7 @@ export function GameScreen() {
                       return;
                     }
                     setTip(null);
-                    once(() => pressSpell(index));
+                    once(() => pressSpell(spell.index));
                   }}
                   onClick={() => {
                     if (suppressClick.current) {
@@ -465,10 +468,10 @@ export function GameScreen() {
                       return;
                     }
                     setTip(null);
-                    once(() => pressSpell(index));
+                    once(() => pressSpell(spell.index));
                   }}
                 >
-                  {hud.art && <span className={`kw-ico i${spell.icon}`} />}
+                  <SpellIcon icon={spell.icon} />
                   {(spell.cd > 0 || spell.gcd > 0) && <span className="kw-sweep" />}
                   {spell.cd > 0.2 && <span className="kw-cd">{Math.ceil(spell.cd)}</span>}
                   <span className="kw-key">{index + 1}</span>
@@ -618,6 +621,42 @@ export function GameScreen() {
                   <button key={b.id} type="button" onClick={() => dialogClick(b.id)}>
                     {b.label}
                   </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {hud.panel === "train" && (
+            <section className="kw-sheet">
+              <div className="kw-row">
+                <h2>Klassenlehrer Bronn</h2>
+                <button type="button" aria-label="Schließen" onClick={() => closePanel()}>
+                  <X size={18} />
+                </button>
+              </div>
+              <p>
+                Dein Beutel: <Coins value={hud.gold} ink />
+              </p>
+              <div className="kw-lessons">
+                {hud.lessons.map((lesson) => (
+                  <div key={lesson.id} className="kw-lesson">
+                    <SpellIcon icon={lesson.icon} />
+                    <div>
+                      <strong>{lesson.name}</strong>
+                      <p>{lesson.blurb}</p>
+                      {lesson.state === "known" && <span>Gelernt</span>}
+                      {lesson.state === "level" && <span>Ab Stufe {lesson.level}</span>}
+                      {lesson.state === "gold" && (
+                        <button type="button" onClick={() => learnSpell(lesson.id)}>
+                          Zu wenig · <Coins value={lesson.cost} ink />
+                        </button>
+                      )}
+                      {lesson.state === "ready" && (
+                        <button type="button" onClick={() => learnSpell(lesson.id)}>
+                          Lernen · <Coins value={lesson.cost} ink />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </section>
