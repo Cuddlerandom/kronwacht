@@ -2,6 +2,14 @@
 
 Ein kleines 2D-Fantasy-Reich fürs Handy. Tippen zum Laufen, Kämpfen, Aufträge, Beutel. Der Fortschritt bleibt lokal im Browser, ohne Konto.
 
+## Spielen
+
+Öffne das Spiel direkt im Browser:
+
+https://cdn.jsdelivr.net/gh/Cuddlerandom/kronwacht@gh-pages/index.html
+
+Der Fortschritt bleibt auf diesem Handy. Das GitHub-Repo ist der Quellcode.
+
 ## Starten
 
 ```bash

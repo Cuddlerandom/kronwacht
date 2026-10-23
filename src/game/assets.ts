@@ -13,23 +13,25 @@ export interface Sheet {
   bbox: BBox | null;
 }
 
+const gameSrc = (file: string) => `${import.meta.env.BASE_URL}game/${file}?v=2`;
+
 const SPEC = [
-  { name: "hero", src: "/game/hero.png?v=2", cols: 4, rows: 4, trim: false },
-  { name: "wolf", src: "/game/wolf.png?v=2", cols: 2, rows: 2, trim: false },
-  { name: "bandit", src: "/game/bandit.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "mara", src: "/game/mara.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "vendor", src: "/game/vendor.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "lira", src: "/game/lira.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "tree", src: "/game/tree.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "cottage", src: "/game/cottage.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "well", src: "/game/well.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "dummy", src: "/game/dummy.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "fence", src: "/game/fence.png?v=2", cols: 1, rows: 1, trim: true },
-  { name: "props", src: "/game/props.png?v=2", cols: 2, rows: 2, trim: false },
-  { name: "icons", src: "/game/icons.png?v=2", cols: 4, rows: 3, trim: false },
-  { name: "grass", src: "/game/tile-grass.jpg?v=2", cols: 1, rows: 1, trim: false },
-  { name: "dirt", src: "/game/tile-dirt.jpg?v=2", cols: 1, rows: 1, trim: false },
-  { name: "water", src: "/game/tile-water.jpg?v=2", cols: 1, rows: 1, trim: false },
+  { name: "hero", src: gameSrc("hero.png"), cols: 4, rows: 4, trim: false },
+  { name: "wolf", src: gameSrc("wolf.png"), cols: 2, rows: 2, trim: false },
+  { name: "bandit", src: gameSrc("bandit.png"), cols: 1, rows: 1, trim: true },
+  { name: "mara", src: gameSrc("mara.png"), cols: 1, rows: 1, trim: true },
+  { name: "vendor", src: gameSrc("vendor.png"), cols: 1, rows: 1, trim: true },
+  { name: "lira", src: gameSrc("lira.png"), cols: 1, rows: 1, trim: true },
+  { name: "tree", src: gameSrc("tree.png"), cols: 1, rows: 1, trim: true },
+  { name: "cottage", src: gameSrc("cottage.png"), cols: 1, rows: 1, trim: true },
+  { name: "well", src: gameSrc("well.png"), cols: 1, rows: 1, trim: true },
+  { name: "dummy", src: gameSrc("dummy.png"), cols: 1, rows: 1, trim: true },
+  { name: "fence", src: gameSrc("fence.png"), cols: 1, rows: 1, trim: true },
+  { name: "props", src: gameSrc("props.png"), cols: 2, rows: 2, trim: false },
+  { name: "icons", src: gameSrc("icons.png"), cols: 4, rows: 3, trim: false },
+  { name: "grass", src: gameSrc("tile-grass.jpg"), cols: 1, rows: 1, trim: false },
+  { name: "dirt", src: gameSrc("tile-dirt.jpg"), cols: 1, rows: 1, trim: false },
+  { name: "water", src: gameSrc("tile-water.jpg"), cols: 1, rows: 1, trim: false },
 ] as const;
 
 export const art: Record<string, Sheet | null> = {};

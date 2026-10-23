@@ -474,7 +474,7 @@
   position: absolute;
   inset: 0;
   border-radius: 0.25rem;
-  background-image: url("/game/icons.png?v=2");
+  background-image: var(--kw-icons);
   background-repeat: no-repeat;
   background-size: 400% 300%;
 }

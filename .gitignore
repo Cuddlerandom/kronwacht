@@ -7,6 +7,8 @@ screenshots/
 artifacts/
 assets/
 dist/
+dist-pages/
+
 *.log
 .env
 .env.*

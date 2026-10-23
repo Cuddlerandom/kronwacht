@@ -41,6 +41,13 @@ import {
 } from "@/game/engine";
 import { drawMinimap, drawPortrait, drawWorld } from "@/game/render";
 
+if (typeof document !== "undefined") {
+  document.documentElement.style.setProperty(
+    "--kw-icons",
+    `url("${import.meta.env.BASE_URL}game/icons.png?v=2")`,
+  );
+}
+
 const GAME_KEYS = new Set([
   "KeyW",
   "KeyA",
