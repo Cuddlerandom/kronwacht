@@ -10,6 +10,8 @@ import {
   SPELL_PRICE,
   SPELL_RANK,
   STARTER_WEAPON,
+  TALENT_LEVEL,
+  TALENTS,
   WHITE_WEAPON,
   armorOf,
   maxHp,
@@ -26,11 +28,13 @@ import type { DrawActor, DrawFloat, DrawModel } from "@/game/render";
 import {
   BANDIT_TILES,
   DUMMY,
+  GLUT_TILES,
   GRAVE,
   HERB_TILES,
   NPCS,
   SPAWN,
   WOLF_TILES,
+  ASH_TILES,
   canStand,
   findPath,
   lineClear,
@@ -102,16 +106,23 @@ export interface Hud {
   log: { text: string; kind: string }[];
   panel: Panel;
   dialog: null | { name: string; text: string; buttons: { id: string; label: string }[] };
-  bag: ({ name: string; qty: number; quality: string; desc: string; kind: string } | null)[];
+  bag: ({ id: string; name: string; qty: number; quality: string; desc: string; kind: string } | null)[];
   weapon: string | null;
   chest: string | null;
   stats: { dmg: string; power: string; armor: number; speed: string };
-  loot: null | { name: string; gold: number; items: { name: string; qty: number; quality: string }[] };
+  loot: null | { name: string; gold: number; items: { id: string; name: string; qty: number; quality: string }[] };
   wares: { id: string; name: string; price: number; quality: string }[];
   banner: string | null;
   hint: boolean;
   sound: boolean;
   zone: string;
+  swing: number;
+  swingOn: boolean;
+  rested: number;
+  herb: number;
+  herbMax: number;
+  talent: string | null;
+  talents: { id: string; name: string; blurb: string }[];
 }
 
 interface BagStack {
@@ -121,7 +132,7 @@ interface BagStack {
 interface Mob {
   id: string;
   name: string;
-  kind: "wolf" | "bandit" | "dummy";
+  kind: "wolf" | "bandit" | "dummy" | "ash";
   x: number;
   y: number;
   homeX: number;
@@ -185,7 +196,11 @@ let chestId: string | null = null;
 let bag: (BagStack | null)[] = Array.from({ length: 16 }, () => null);
 let quests: QStore = {};
 let known = new Set<string>();
-let kills = { wolf: 0, bandit: 0 };
+let talent: string | null = null;
+let herbSkill = 1;
+let rested = 0;
+let restSaid = false;
+let kills = { wolf: 0, bandit: 0, ash: 0 };
 let dead = false;
 let ghost = false;
 let hint = true;
@@ -200,7 +215,7 @@ let lootId: string | null = null;
 
 let mobs: Mob[] = [];
 let corpses: Corpse[] = [];
-let herbs: { id: string; x: number; y: number; down: number }[] = [];
+let herbs: { id: string; x: number; y: number; down: number; item: string; skill: number; gain: number; cap: number }[] = [];
 let targetId: string | null = null;
 let attackId: string | null = null;
 let chase: { kind: "talk" | "gather" | "loot"; id: string } | null = null;
@@ -222,6 +237,19 @@ let hotAmt = 0;
 let potionCd = 0;
 let immune = 0;
 let floats: (DrawFloat & { vy: number })[] = [];
+let bolts: {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  ang: number;
+  targetId: string;
+  color: string;
+  apply: () => void;
+  done: boolean;
+}[] = [];
+let slashes: { x: number; y: number; life: number }[] = [];
+let rings: { x: number; y: number; r: number; max: number }[] = [];
 let log: { text: string; kind: string }[] = [];
 let banner: string | null = null;
 let bannerT = 0;
@@ -286,6 +314,13 @@ function blankHud(): Hud {
     hint: false,
     sound: true,
     zone: "Lindenhain",
+    swing: 0,
+    swingOn: false,
+    rested: 0,
+    herb: 1,
+    herbMax: 75,
+    talent: null,
+    talents: [],
   };
 }
 
@@ -367,6 +402,8 @@ function questBy(id: string) {
 function met(q: QuestDef) {
   if (q.id === "wolves") return kills.wolf >= q.count;
   if (q.id === "bandits") return kills.bandit >= q.count;
+  if (q.id === "ashes") return kills.ash >= q.count;
+  if (q.id === "gluts") return countItem("glutkraut") >= q.count;
   return countItem("silberblatt") >= q.count;
 }
 function qState(id: QuestId): "locked" | "available" | "active" | "ready" | "done" {
@@ -409,9 +446,29 @@ function spawnMobs() {
   mobs = [
     ...WOLF_TILES.map(([tx, ty], i) => makeMob(`wolf-${i}`, "Dornenwolf", "wolf", tx, ty, 46, 4, 6, 108, 126, 26, 2, 1.75)),
     ...BANDIT_TILES.map(([tx, ty], i) => makeMob(`bandit-${i}`, "Rotschärpe", "bandit", tx, ty, 88, 6, 9, 94, 148, 46, 4, 1.95)),
+    ...ASH_TILES.map(([tx, ty], i) => makeMob(`ash-${i}`, "Aschenläufer", "ash", tx, ty, 120, 8, 12, 96, 150, 64, 7, 2.1)),
     makeMob("dummy", "Übungspuppe", "dummy", 12, 33, 500, 0, 0, 0, 0, 0, 1, 9),
   ];
-  herbs = HERB_TILES.map(([tx, ty], i) => ({ id: `herb-${i}`, ...tileCenter(tx, ty), down: 0 }));
+  herbs = [
+    ...HERB_TILES.map(([tx, ty], i) => ({
+      id: `herb-${i}`,
+      ...tileCenter(tx, ty),
+      down: 0,
+      item: "silberblatt",
+      skill: 1,
+      gain: 5,
+      cap: 40,
+    })),
+    ...GLUT_TILES.map(([tx, ty], i) => ({
+      id: `glut-${i}`,
+      ...tileCenter(tx, ty),
+      down: 0,
+      item: "glutkraut",
+      skill: 20,
+      gain: 4,
+      cap: 75,
+    })),
+  ];
   corpses = [];
 }
 function makeMob(
@@ -469,7 +526,11 @@ function freshPlayer(nextName: string, nextSpec: Spec) {
   bag = Array.from({ length: 16 }, () => null);
   quests = {};
   known = new Set([SPEC_SPELLS[nextSpec][0]!.id]);
-  kills = { wolf: 0, bandit: 0 };
+  talent = null;
+  herbSkill = 1;
+  rested = 0;
+  restSaid = false;
+  kills = { wolf: 0, bandit: 0, ash: 0 };
   gold = 0;
   hp = hpMax();
   rp = spec === "klinge" ? 30 : rpMax();
@@ -504,6 +565,9 @@ function resetCombat() {
   dmgBuff = 0;
   dot = null;
   hotLeft = 0;
+  bolts = [];
+  slashes = [];
+  rings = [];
   panel = null;
   dialogNpc = null;
 }
@@ -629,7 +693,10 @@ interface SaveFile {
   chest: string | null;
   quests: QStore;
   known: string[];
-  kills: { wolf: number; bandit: number };
+  kills: { wolf: number; bandit: number; ash?: number };
+  herb?: number;
+  rested?: number;
+  talent?: string | null;
   dead: boolean;
   ghost: boolean;
   hint: boolean;
@@ -654,6 +721,9 @@ function snapshot(): SaveFile {
     quests,
     known: [...known],
     kills,
+    herb: herbSkill,
+    rested: Math.floor(rested),
+    talent,
     dead,
     ghost,
     hint,
@@ -676,7 +746,12 @@ function applySave(p: SaveFile) {
   quests = p.quests ?? {};
   known = new Set(p.known?.length ? p.known : [SPEC_SPELLS[spec][0]!.id]);
   known.add(SPEC_SPELLS[spec][0]!.id);
-  kills = p.kills ?? { wolf: 0, bandit: 0 };
+  const allowed = new Set(TALENTS[spec].map((t) => t.id));
+  talent = p.talent && allowed.has(p.talent) ? p.talent : null;
+  herbSkill = Math.max(1, p.herb ?? 1);
+  rested = Math.max(0, p.rested ?? 0);
+  restSaid = false;
+  kills = { wolf: p.kills?.wolf ?? 0, bandit: p.kills?.bandit ?? 0, ash: p.kills?.ash ?? 0 };
   dead = Boolean(p.dead);
   ghost = Boolean(p.ghost);
   hint = p.hint !== false;
@@ -896,11 +971,12 @@ export function learnSpell(id: string) {
 function beginSpell(spell: SpellDef, target: string | null) {
   if (rp < spell.cost) return;
   rp -= spell.cost;
+  const dur = spell.cast > 0 && talent === "eile" ? spell.cast * 0.8 : spell.cast;
   cds[spell.id] = spell.cd;
-  gcd = Math.max(1, spell.cast || 0.9);
+  gcd = Math.max(1, dur || 0.9);
   pending = null;
-  if (spell.cast > 0) {
-    casting = { spell, t: 0, dur: spell.cast, cost: spell.cost, targetId: target };
+  if (dur > 0) {
+    casting = { spell, t: 0, dur, cost: spell.cost, targetId: target };
     path = [];
     chase = null;
     click = null;
@@ -911,10 +987,38 @@ function beginSpell(spell: SpellDef, target: string | null) {
   publish();
 }
 
+function spellAmount(spell: SpellDef) {
+  let n = powerBase(spell) * spell.coef;
+  if (talent === "brand" && spell.id === "feuerball") n *= 1.18;
+  if (talent === "glut" && spell.id === "versengen") n *= 1.3;
+  if (talent === "gnade" && (spell.shape === "heal" || spell.shape === "hot")) n *= 1.18;
+  if (talent === "hort" && spell.shape === "shield") n *= 1.22;
+  if (talent === "urteil" && spell.id === "richtspruch") n *= 1.18;
+  return n;
+}
+
+function flyTo(target: Mob, color: string, apply: () => void) {
+  bolts.push({
+    x: px,
+    y: py - 52,
+    tx: target.x,
+    ty: target.y,
+    ang: 0,
+    targetId: target.id,
+    color,
+    apply,
+    done: false,
+  });
+}
+
+function slashAt(x: number, y: number) {
+  slashes.push({ x, y: y - 28, life: 0.22 });
+}
+
 function resolveSpell(spell: SpellDef, target: string | null) {
   sfx.spell();
   if (spell.id === "schildwall") {
-    armorBuff = spell.duration ?? 8;
+    armorBuff = (spell.duration ?? 8) * (talent === "eisen" ? 1.25 : 1);
     popSelf("Schildwall", "info");
     return;
   }
@@ -924,29 +1028,30 @@ function resolveSpell(spell: SpellDef, target: string | null) {
     return;
   }
   if (spell.shape === "heal") {
-    const n = roll(powerBase(spell) * spell.coef);
+    const n = roll(spellAmount(spell));
     hp = Math.min(hpMax(), hp + n);
     popSelf(`+${n}`, "heal");
     sfx.heal();
     return;
   }
   if (spell.shape === "hot") {
-    hotLeft = spell.duration ?? 8;
+    const dur = spell.duration ?? 8;
+    hotLeft = dur;
     hotTick = 0;
-    hotAmt = Math.max(1, Math.round((powerBase(spell) * spell.coef) / (spell.duration ?? 8)));
+    hotAmt = Math.max(1, Math.round(spellAmount(spell) / dur));
     popSelf("Erquickung", "heal");
     return;
   }
   if (spell.shape === "shield") {
-    absorb = Math.round(powerBase(spell) * spell.coef);
+    absorb = Math.round(spellAmount(spell));
     popSelf(`Schild ${absorb}`, "mana");
     return;
   }
   if (spell.shape === "nova") {
-    const hits = mobs.filter((m) => !m.dead && m.kind !== "dummy" ? dist(m.x, m.y) < (spell.radius ?? 110) : !m.dead && dist(m.x, m.y) < (spell.radius ?? 110));
     const list = mobs.filter((m) => !m.dead && dist(m.x, m.y) <= (spell.radius ?? 110));
     if (!list.length) popSelf("Verfehlt", "info");
-    for (const m of list) hurtMob(m, roll(powerBase(spell) * spell.coef), false);
+    for (const m of list) hurtMob(m, roll(spellAmount(spell)), false);
+    rings.push({ x: px, y: py, r: 12, max: spell.radius ?? 110 });
     combat = 5;
     return;
   }
@@ -957,10 +1062,42 @@ function resolveSpell(spell: SpellDef, target: string | null) {
     return;
   }
   faceTarget(tgt.x, tgt.y);
+  if (spell.range >= 150) {
+    const color = spell.id === "richtspruch" ? "#f0d48a" : "#ff8a2a";
+    if (spell.shape === "dot") {
+      flyTo(tgt, color, () => {
+        const live = mobBy(tgt.id);
+        if (!live || live.dead) return;
+        const dur = (spell.duration ?? 8) * (talent === "glut" ? 1.25 : 1);
+        dot = {
+          id: spell.id,
+          target: live.id,
+          left: dur,
+          tick: 0.2,
+          amount: Math.max(1, Math.round(spellAmount(spell) / dur)),
+        };
+        pop("Versengt", live.x, live.y, "gold");
+        combat = 5;
+      });
+      return;
+    }
+    const amount = roll(spellAmount(spell));
+    const splash = spell.shape === "aoe" ? (spell.radius ?? 70) : 0;
+    flyTo(tgt, color, () => {
+      const live = mobBy(tgt.id);
+      if (!live || live.dead) return;
+      const list =
+        splash > 0
+          ? mobs.filter((m) => !m.dead && Math.hypot(m.x - live.x, m.y - live.y) <= splash)
+          : [live];
+      for (const m of list) hurtMob(m, Math.round(amount * (m === live ? 1 : 0.85)), true);
+      combat = 5;
+    });
+    return;
+  }
   if (spell.shape === "dot") {
-    const total = powerBase(spell) * spell.coef;
     const dur = spell.duration ?? 8;
-    dot = { id: spell.id, target: tgt.id, left: dur, tick: 0.2, amount: Math.max(1, Math.round(total / dur)) };
+    dot = { id: spell.id, target: tgt.id, left: dur, tick: 0.2, amount: Math.max(1, Math.round(spellAmount(spell) / dur)) };
     pop("Versengt", tgt.x, tgt.y, "gold");
     combat = 5;
     return;
@@ -969,7 +1106,8 @@ function resolveSpell(spell: SpellDef, target: string | null) {
     spell.shape === "aoe"
       ? mobs.filter((m) => !m.dead && Math.hypot(m.x - tgt.x, m.y - tgt.y) <= (spell.radius ?? 70))
       : [tgt];
-  for (const m of list) hurtMob(m, roll(powerBase(spell) * spell.coef * (m === tgt ? 1 : 0.85)), true);
+  slashAt(tgt.x, tgt.y);
+  for (const m of list) hurtMob(m, roll(spellAmount(spell) * (m === tgt ? 1 : 0.85)), true);
   combat = 5;
 }
 
@@ -993,7 +1131,7 @@ function hurtMob(m: Mob, amount: number, canCrit: boolean) {
   dmg = Math.max(1, Math.round(dmg));
   m.hp -= dmg;
   m.flash = 0.12;
-  pop(crit ? `${dmg}!` : String(dmg), m.x, m.y - (crit ? 10 : 0), crit ? "gold" : "info");
+  pop(crit ? `${dmg}!` : String(dmg), m.x + (Math.random() * 14 - 7), m.y - (crit ? 18 : 8), crit ? "gold" : "hurt");
   sfx.hit();
   combat = 5;
   if (m.kind !== "dummy") m.evade = 0;
@@ -1024,7 +1162,11 @@ function killMob(m: Mob) {
     kills.bandit += 1;
     say(`Rotschärpe ${Math.min(kills.bandit, 5)}/5`, "good");
   }
-  if (xpGain > 0) addXp(xpGain);
+  if (m.kind === "ash" && quests.ashes === "active") {
+    kills.ash += 1;
+    say(`Aschenläufer ${Math.min(kills.ash, 5)}/5`, "good");
+  }
+  if (xpGain > 0) addXp(xpGain, true);
   const loot = rollLoot(m);
   corpses.push({ id: m.id, name: m.name, x: m.x, y: m.y, gold: loot.gold, items: loot.items, ttl: 50 });
   if (dist(m.x, m.y) < 120) openLoot(m.id);
@@ -1041,20 +1183,40 @@ function xpFor(m: Mob) {
 }
 function rollLoot(m: Mob) {
   const items: BagStack[] = [];
+  const drop = (id: string, chance: number) => {
+    if (Math.random() < chance) items.push({ id, qty: 1 });
+  };
   let g = 0;
   if (m.kind === "wolf") {
     g = 3 + Math.floor(Math.random() * 8);
-    if (Math.random() < 0.6) items.push({ id: "pelz", qty: 1 });
+    drop("pelz", 0.7);
+    drop("reisszahn", 0.35);
+    drop("wegzehrung", 0.1);
   } else if (m.kind === "bandit") {
     g = 8 + Math.floor(Math.random() * 14);
-    if (Math.random() < 0.55) items.push({ id: "schaerpe", qty: 1 });
-    if (Math.random() < 0.12) items.push({ id: GREEN_WEAPON[spec], qty: 1 });
+    drop("schaerpe", 0.55);
+    drop("wegzehrung", 0.18);
+    drop("quellwasser", 0.1);
+    drop(GREEN_WEAPON[spec], 0.08);
+  } else if (m.kind === "ash") {
+    g = 10 + Math.floor(Math.random() * 16);
+    drop("asche", 0.7);
+    drop("wegzehrung", 0.16);
+    drop("glutkraut", 0.08);
+    drop("brandtuch", 0.06);
   }
   return { gold: g, items };
 }
-function addXp(n: number) {
-  xp += n;
-  say(`Erfahrung: ${n}`, "good");
+function addXp(n: number, rest = false) {
+  let gain = n;
+  let bonus = 0;
+  if (rest && rested > 0 && n > 0) {
+    bonus = Math.min(Math.floor(rested), n);
+    rested -= bonus;
+    gain += bonus;
+  }
+  xp += gain;
+  say(bonus ? `Erfahrung: ${n} + ${bonus} Ruhe` : `Erfahrung: ${gain}`, "good");
   let up = false;
   while (level < 20 && xp >= xpToNext(level)) {
     xp -= xpToNext(level);
@@ -1067,6 +1229,7 @@ function addXp(n: number) {
     say(`Stufe auf! Du bist jetzt Stufe ${level}.`, "good");
     const next = SPEC_SPELLS[spec].find((spell, i) => (SPELL_RANK[i] ?? 1) === level && !known.has(spell.id));
     if (next) say(`${next.name} wartet bei Klassenlehrer Bronn.`, "good");
+    if (level >= TALENT_LEVEL && !talent) say("Ein Talent ist frei. Öffne den Held.", "good");
     popSelf(`Stufe ${level}`, "gold");
     sfx.level();
   }
@@ -1124,7 +1287,7 @@ function damagePlayer(raw: number, from: Mob) {
   }
   let dmg = raw;
   if (armorBuff > 0) dmg *= 0.55;
-  const armor = armorOf(level, item(chestId), spec);
+  const armor = playerArmor();
   dmg *= 1 - Math.min(0.5, armor / (armor + 85));
   dmg = Math.max(1, Math.round(dmg));
   if (absorb > 0) {
@@ -1269,6 +1432,7 @@ function gossipLine(id: string) {
 function finishQuest(q: QuestDef) {
   if (qState(q.id) !== "ready") return;
   if (q.id === "herbs") removeItem("silberblatt", 4);
+  if (q.id === "gluts") removeItem("glutkraut", 3);
   quests[q.id] = "done";
   gold += q.gold;
   addXp(q.xp);
@@ -1280,6 +1444,15 @@ function finishQuest(q: QuestDef) {
     const left = addItem(GREEN_WEAPON[spec], 1);
     if (left) say("Kein Platz für die Waffe.", "bad");
     else say(`${ITEMS[GREEN_WEAPON[spec]]?.name} liegt im Beutel.`, "loot");
+  }
+  if (q.id === "ashes") {
+    const left = addItem("brandtuch", 1);
+    if (left) say("Kein Platz für das Brandtuch.", "bad");
+    else say("Brandtuch liegt im Beutel.", "loot");
+  }
+  if (q.id === "gluts") {
+    const left = addItem("quellwasser", 2);
+    if (left) say("Kein Platz für das Quellwasser.", "bad");
   }
   say(q.done, "say");
   sfx.quest();
@@ -1379,17 +1552,58 @@ function tryGather(id: string) {
     return;
   }
   if (dist(herb.x, herb.y) > 48) return;
-  if (addItem("silberblatt", 1) > 0) {
+  const def = ITEMS[herb.item];
+  if (herbSkill < herb.skill) {
+    say(`Kräuterkunde ${herbSkill}. ${def?.name ?? "Das Kraut"} braucht ${herb.skill}.`, "bad");
+    chase = null;
+    return;
+  }
+  if (addItem(herb.item, 1) > 0) {
     say("Der Beutel ist voll.", "bad");
     chase = null;
     return;
   }
-  herb.down = 28;
+  herb.down = herb.item === "glutkraut" ? 42 : 28;
   chase = null;
+  const before = herbSkill;
+  if (herbSkill < herb.cap) herbSkill = Math.min(herb.cap, herbSkill + herb.gain);
   sfx.quest();
-  say(`Silberblatt ${countItem("silberblatt")}/4`, "good");
-  pop("Silberblatt", herb.x, herb.y, "heal");
+  const have = countItem(herb.item);
+  if (herb.item === "silberblatt" && quests.herbs === "active") say(`Silberblatt ${Math.min(have, 4)}/4`, "good");
+  else if (herb.item === "glutkraut" && quests.gluts === "active") say(`Glutkraut ${Math.min(have, 3)}/3`, "good");
+  else say(`${def?.name ?? "Kraut"} gepflückt.`, "good");
+  if (herbSkill > before) say(`Kräuterkunde ${herbSkill}.`, "good");
+  pop(def?.name ?? "Kraut", herb.x, herb.y, "heal");
   markDirty();
+}
+
+export function pickTalent(id: string) {
+  if (phase !== "play" || dead) return;
+  if (level < TALENT_LEVEL) {
+    say(`Talente ab Stufe ${TALENT_LEVEL}.`, "bad");
+    publish();
+    return;
+  }
+  if (talent) {
+    say("Die Wahl bleibt.", "sys");
+    publish();
+    return;
+  }
+  const def = TALENTS[spec].find((t) => t.id === id);
+  if (!def) return;
+  talent = def.id;
+  say(`${def.name} gewählt.`, "good");
+  sfx.level();
+  markDirty();
+  publish();
+}
+
+function playerArmor() {
+  return armorOf(level, item(chestId), spec) + (talent === "eisen" ? 12 : 0);
+}
+
+function swingMax() {
+  return spec === "klinge" ? 2 : 2.15;
 }
 
 function doAuto() {
@@ -1400,9 +1614,11 @@ function doAuto() {
   }
   faceTarget(tgt.x, tgt.y);
   const w = item(weaponId);
-  const base = spec === "klinge" ? weaponDamage(level, w) : spellPower(level, w) * 0.55;
+  let base = spec === "klinge" ? weaponDamage(level, w) : spellPower(level, w) * 0.55;
+  if (talent === "wucht") base *= 1.18;
   hurtMob(tgt, roll(base), true);
-  if (spec === "klinge") rp = Math.min(rpMax(), rp + 8);
+  slashAt(tgt.x, tgt.y);
+  if (spec === "klinge") rp = Math.min(rpMax(), rp + (talent === "zorn" ? 13 : 8));
   sfx.hit();
 }
 
@@ -1508,6 +1724,30 @@ export function tick(dt: number) {
     f.y += f.vy * dt;
   }
   floats = floats.filter((f) => f.life > 0);
+  for (const s of slashes) s.life -= dt;
+  slashes = slashes.filter((s) => s.life > 0);
+  for (const r of rings) r.r += dt * 220;
+  rings = rings.filter((r) => r.r < r.max);
+  for (const b of bolts) {
+    const live = mobBy(b.targetId);
+    const tx = live && !live.dead ? live.x : b.tx;
+    const ty = (live && !live.dead ? live.y : b.ty) - 30;
+    const dx = tx - b.x;
+    const dy = ty - b.y;
+    const distBolt = Math.hypot(dx, dy) || 1;
+    b.ang = Math.atan2(dy, dx);
+    const step = 420 * dt;
+    if (!live || live.dead || distBolt <= step + 8) {
+      if (live && !live.dead) b.apply();
+      b.done = true;
+    } else {
+      b.x += (dx / distBolt) * step;
+      b.y += (dy / distBolt) * step;
+      b.tx = live.x;
+      b.ty = live.y;
+    }
+  }
+  bolts = bolts.filter((b) => !b.done);
   shake = Math.max(0, shake - dt * 18);
   if (bannerT > 0) {
     bannerT -= dt;
@@ -1638,7 +1878,7 @@ export function tick(dt: number) {
       swing -= dt;
       if (dist(tgt.x, tgt.y) <= 56 && swing <= 0) {
         doAuto();
-        swing = spec === "klinge" ? 2 : 2.15;
+        swing = swingMax();
       }
     }
   }
@@ -1647,6 +1887,14 @@ export function tick(dt: number) {
     hp = Math.min(hpMax(), hp + hpMax() * 0.04 * dt);
     if (spec === "klinge") rp = Math.max(0, rp - 7 * dt);
     else rp = Math.min(rpMax(), rp + rpMax() * 0.08 * dt);
+    if (dist(GRAVE.x, GRAVE.y) < 130) {
+      const cap = Math.round(xpToNext(level) * 1.5);
+      if (!restSaid) {
+        restSaid = true;
+        say("Der Stein im Friedhof schenkt Ruhe.", "good");
+      }
+      if (rested < cap) rested = Math.min(cap, rested + 22 * dt);
+    } else if (dist(GRAVE.x, GRAVE.y) > 210) restSaid = false;
   } else combat = Math.max(0, combat - dt);
 
   for (const m of mobs) updateMob(m, dt);
@@ -1742,7 +1990,7 @@ export function drawModel(): DrawModel {
     });
   }
   for (const m of mobs) {
-    const sprite = m.kind === "wolf" ? "wolf" : m.kind === "bandit" ? "bandit" : "dummy";
+    const sprite = m.kind === "wolf" ? "wolf" : m.kind === "dummy" ? "dummy" : "bandit";
     actors.push({
       id: m.id,
       sprite,
@@ -1754,12 +2002,13 @@ export function drawModel(): DrawModel {
       level: m.kind === "dummy" ? undefined : m.level,
       hp: m.hp,
       hpMax: m.hpMax,
-      hostile: m.kind !== "dummy" ? true : true,
+      hostile: true,
       dead: m.dead,
       showBar: selected === m.id || (m.hp < m.hpMax && !m.dead),
       mark: null,
       selected: selected === m.id,
       hitH: m.kind === "dummy" ? 96 : 78,
+      tint: m.kind === "ash" ? "ash" : undefined,
     });
   }
   const tgt = mobBy(targetId) ?? null;
@@ -1783,6 +2032,9 @@ export function drawModel(): DrawModel {
         : null,
     lowHp: !dead && !ghost && hp / hpMax() < 0.28,
     sparkles: corpses.map((c) => ({ x: c.x, y: c.y })),
+    bolts: bolts.map((b) => ({ x: b.x, y: b.y, ang: b.ang, color: b.color })),
+    slashes: slashes.map((s) => ({ x: s.x, y: s.y, life: s.life })),
+    rings: rings.map((r) => ({ x: r.x, y: r.y, r: r.r, max: r.max })),
   };
 }
 
@@ -1791,7 +2043,7 @@ export function playerPoint() {
 }
 export function portraitSprite() {
   const m = mobBy(targetId);
-  if (m) return m.kind === "wolf" ? "wolf" : m.kind === "bandit" ? "bandit" : "dummy";
+  if (m) return m.kind === "wolf" ? "wolf" : m.kind === "dummy" ? "dummy" : "bandit";
   const n = npcBy(targetId);
   if (n) return n.sprite;
   return "";
@@ -1831,7 +2083,16 @@ function buildHud(): Hud {
     return { id: spell.id, name: spell.name, icon: spell.icon, level: need, cost, blurb: spell.blurb, state };
   });
   const tracker = QUESTS.filter((q) => quests[q.id] === "active").map((q) => {
-    const have = q.id === "wolves" ? kills.wolf : q.id === "bandits" ? kills.bandit : countItem("silberblatt");
+    const have =
+      q.id === "wolves"
+        ? kills.wolf
+        : q.id === "bandits"
+          ? kills.bandit
+          : q.id === "ashes"
+            ? kills.ash
+            : q.id === "gluts"
+              ? countItem("glutkraut")
+              : countItem("silberblatt");
     const ready = met(q);
     const who = q.giver === "mara" ? "Mara" : "Lira";
     return {
@@ -1841,7 +2102,7 @@ function buildHud(): Hud {
     };
   });
   if (!tracker.length && phase === "play") {
-    tracker.push({ title: "Lindenhain", ready: false, lines: ["Gelbes ! bei Mara, Lira oder Bronn"] });
+    tracker.push({ title: "Lindenhain", ready: false, lines: ["Gelbes ! auf der Karte"] });
   }
   const tgt = mobBy(targetId);
   const npc = npcBy(targetId);
@@ -1881,7 +2142,14 @@ function buildHud(): Hud {
     dialog: dialogView(),
     bag: bag.map((s) =>
       s && ITEMS[s.id]
-        ? { name: ITEMS[s.id]!.name, qty: s.qty, quality: ITEMS[s.id]!.quality, desc: ITEMS[s.id]!.desc, kind: ITEMS[s.id]!.kind }
+        ? {
+            id: s.id,
+            name: ITEMS[s.id]!.name,
+            qty: s.qty,
+            quality: ITEMS[s.id]!.quality,
+            desc: ITEMS[s.id]!.desc,
+            kind: ITEMS[s.id]!.kind,
+          }
         : null,
     ),
     weapon: wpn?.name ?? null,
@@ -1889,7 +2157,7 @@ function buildHud(): Hud {
     stats: {
       dmg: `${Math.round(weaponDamage(level, wpn))}`,
       power: `${Math.round(spellPower(level, wpn))}`,
-      armor: armorOf(level, item(chestId), spec),
+      armor: playerArmor(),
       speed: spec === "klinge" ? "2.0s" : "2.2s",
     },
     loot: openCorpse
@@ -1897,6 +2165,7 @@ function buildHud(): Hud {
           name: openCorpse.name,
           gold: openCorpse.gold,
           items: openCorpse.items.map((it) => ({
+            id: it.id,
             name: ITEMS[it.id]?.name ?? it.id,
             qty: it.qty,
             quality: ITEMS[it.id]?.quality ?? "common",
@@ -1917,6 +2186,13 @@ function buildHud(): Hud {
     hint: hint && phase === "play",
     sound: soundOn,
     zone,
+    swing: attackId ? Math.max(0, Math.min(1, 1 - swing / swingMax())) : 0,
+    swingOn: Boolean(attackId) && !dead && !ghost,
+    rested: Math.floor(rested),
+    herb: herbSkill,
+    herbMax: 75,
+    talent,
+    talents: TALENTS[spec],
   };
 }
 

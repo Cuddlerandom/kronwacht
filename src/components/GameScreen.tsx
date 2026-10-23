@@ -25,6 +25,7 @@ import {
   portraitSprite,
   pressSlot,
   pressSpell,
+  pickTalent,
   release,
   rez,
   sellSlot,
@@ -43,6 +44,7 @@ import {
 } from "@/game/engine";
 import { drawMinimap, drawPortrait, drawWorld } from "@/game/render";
 import { SpellIcon } from "@/game/spell-icon";
+import { ItemIcon } from "@/game/item-icon";
 
 if (typeof document !== "undefined") {
   document.documentElement.style.setProperty(
@@ -117,6 +119,7 @@ export function GameScreen() {
   const [heroName, setHeroName] = useState("Aren");
   const [spec, setSpec] = useState<Spec>("klinge");
   const [creating, setCreating] = useState(false);
+  const [bagFocus, setBagFocus] = useState<number | null>(null);
   const [tip, setTip] = useState<{ name: string; desc: string } | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const stickId = useRef<number | null>(null);
@@ -406,7 +409,7 @@ export function GameScreen() {
           </div>
           {hud.banner && <div className="kw-banner">{hud.banner}</div>}
           {hud.hint && (
-            <p className="kw-hint">Eine Fähigkeit am Start. Bronn im Dorf lehrt den Rest. Gelbes ! ist Auftrag oder Ausbildung.</p>
+            <p className="kw-hint">Eine Fähigkeit am Start. Bronn lehrt den Rest. Gelbes ! auf der Karte. Der Stein im Süden schenkt Ruhe.</p>
           )}
           <div
             className="kw-stick"
@@ -438,6 +441,11 @@ export function GameScreen() {
                 </div>
               ))}
             </div>
+            {hud.swingOn && (
+              <div className="kw-swing" aria-label="Schlag">
+                <span style={{ width: `${hud.swing * 100}%` }} />
+              </div>
+            )}
             <div className="kw-actions">
               {hud.spells.map((spell, index) => (
                 <button
@@ -488,7 +496,16 @@ export function GameScreen() {
               </button>
             </div>
             <div className="kw-xp" aria-label="Erfahrung">
-              <span style={{ width: `${(hud.xp / hud.xpMax) * 100}%` }} />
+              <span className="is-xp" style={{ width: `${Math.min(100, (hud.xp / hud.xpMax) * 100)}%` }} />
+              {hud.rested > 0 && (
+                <span
+                  className="is-rest"
+                  style={{
+                    left: `${Math.min(100, (hud.xp / hud.xpMax) * 100)}%`,
+                    width: `${Math.min(100 - (hud.xp / hud.xpMax) * 100, (hud.rested / hud.xpMax) * 100)}%`,
+                  }}
+                />
+              )}
             </div>
           </div>
           {tip && (
@@ -528,12 +545,16 @@ export function GameScreen() {
                     key={i}
                     type="button"
                     className={slot ? `kw-slot q-${slot.quality}` : "kw-slot"}
-                    onClick={() => slot && useSlot(i)}
+                    aria-label={slot?.name ?? "Leer"}
+                    onClick={() => {
+                      setBagFocus(i);
+                      if (slot) useSlot(i);
+                    }}
                   >
                     {slot ? (
                       <>
-                        {slot.name}
-                        {slot.qty > 1 ? ` ×${slot.qty}` : ""}
+                        <ItemIcon id={slot.id} />
+                        {slot.qty > 1 ? <em className="kw-qty">{slot.qty}</em> : null}
                       </>
                     ) : (
                       ""
@@ -541,7 +562,11 @@ export function GameScreen() {
                   </button>
                 ))}
               </div>
-              <p>Tippe Ausrüstung zum Anlegen, Tränke zum Trinken.</p>
+              <p>
+                {bagFocus !== null && hud.bag[bagFocus]
+                  ? `${hud.bag[bagFocus]!.name}. ${hud.bag[bagFocus]!.desc}`
+                  : "Tippe Ausrüstung zum Anlegen, Tränke zum Trinken."}
+              </p>
             </section>
           )}
           {hud.panel === "char" && (
@@ -584,6 +609,32 @@ export function GameScreen() {
               <div className="kw-row">
                 <span>Kupfer</span>
                 <Coins value={hud.gold} ink />
+              </div>
+              <div className="kw-row">
+                <span>Kräuterkunde</span>
+                <span>
+                  {hud.herb}/{hud.herbMax}
+                </span>
+              </div>
+              <div className="kw-row">
+                <span>Ruhe</span>
+                <span>{hud.rested > 0 ? `${hud.rested} am Stein` : "—"}</span>
+              </div>
+              <h3>Talente</h3>
+              {hud.level < 10 && <p>Ab Stufe 10 wählst du eines. Die Wahl bleibt.</p>}
+              <div className="stack">
+                {hud.talents.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={hud.level < 10 || (hud.talent !== null && hud.talent !== t.id)}
+                    onClick={() => pickTalent(t.id)}
+                  >
+                    {t.name}
+                    {hud.talent === t.id ? " · gewählt" : ""}
+                    <span className="kw-talent-line">{t.blurb}</span>
+                  </button>
+                ))}
               </div>
               <div className="stack">
                 <button type="button" onClick={() => toggleSound()}>
@@ -674,8 +725,10 @@ export function GameScreen() {
               </p>
               <div className="stack">
                 {hud.wares.map((w) => (
-                  <button key={w.id} type="button" onClick={() => buy(w.id)}>
-                    {w.name} · <Coins value={w.price} ink />
+                  <button key={w.id} type="button" className="kw-ware" onClick={() => buy(w.id)}>
+                    <ItemIcon id={w.id} />
+                    <span>{w.name}</span>
+                    <Coins value={w.price} ink />
                   </button>
                 ))}
               </div>
@@ -687,7 +740,14 @@ export function GameScreen() {
                     className={slot ? `kw-slot q-${slot.quality}` : "kw-slot"}
                     onClick={() => slot && sellSlot(i)}
                   >
-                    {slot ? `Verkauf ${slot.name}` : ""}
+                    {slot ? (
+                      <>
+                        <ItemIcon id={slot.id} />
+                        <em className="kw-qty">Verkauf</em>
+                      </>
+                    ) : (
+                      ""
+                    )}
                   </button>
                 ))}
               </div>
@@ -696,14 +756,22 @@ export function GameScreen() {
           {hud.panel === "loot" && hud.loot && (
             <section className="kw-sheet">
               <h2>{hud.loot.name}</h2>
-              <p>
-                {hud.loot.gold > 0 && (
-                  <>
-                    <Coins value={hud.loot.gold} ink />{" "}
-                  </>
-                )}
-                {hud.loot.items.map((it) => `${it.name}${it.qty > 1 ? ` ×${it.qty}` : ""}`).join(", ")}
-              </p>
+              {hud.loot.gold > 0 && (
+                <p>
+                  <Coins value={hud.loot.gold} ink />
+                </p>
+              )}
+              <div className="kw-loot">
+                {hud.loot.items.map((it, i) => (
+                  <div key={`${it.id}-${i}`} className="kw-lootline">
+                    <ItemIcon id={it.id} />
+                    <span className={`qtext-${it.quality}`}>
+                      {it.name}
+                      {it.qty > 1 ? ` ×${it.qty}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
               <div className="stack">
                 <button type="button" onClick={() => takeLoot()}>
                   Alles nehmen

@@ -195,6 +195,43 @@ export const ITEMS: Record<string, ItemDef> = {
     stack: 10,
     desc: "Kalt aus dem Brunnen. Füllt Mana, bei der Klinge die Wut.",
   },
+  reisszahn: {
+    id: "reisszahn",
+    name: "Rissiger Reißzahn",
+    quality: "poor",
+    kind: "junk",
+    sell: 4,
+    stack: 10,
+    desc: "Stumpf, aber Halden nimmt ihn.",
+  },
+  asche: {
+    id: "asche",
+    name: "Kalte Asche",
+    quality: "poor",
+    kind: "junk",
+    sell: 5,
+    stack: 10,
+    desc: "Noch warm, wenn man lügt.",
+  },
+  glutkraut: {
+    id: "glutkraut",
+    name: "Glutkraut",
+    quality: "common",
+    kind: "quest",
+    sell: 0,
+    stack: 20,
+    desc: "Blätter wie Glut. Erst ab Kräuterkunde 20.",
+  },
+  brandtuch: {
+    id: "brandtuch",
+    name: "Brandtuch",
+    quality: "uncommon",
+    kind: "chest",
+    armor: 20,
+    sell: 70,
+    stack: 1,
+    desc: "Rauch hängt im Gewebe. Es hält trotzdem.",
+  },
 };
 
 export const STARTER_WEAPON: Record<Spec, string> = {
@@ -403,7 +440,7 @@ export const SPELL_RANK = [1, 2, 4, 6];
 export const SPELL_PRICE = [0, 50, 180, 450];
 
 export interface QuestDef {
-  id: "wolves" | "herbs" | "bandits";
+  id: "wolves" | "herbs" | "bandits" | "ashes" | "gluts";
   title: string;
   giver: string;
   offer: string;
@@ -413,7 +450,7 @@ export interface QuestDef {
   count: number;
   xp: number;
   gold: number;
-  requires?: "wolves";
+  requires?: "wolves" | "herbs" | "bandits" | "ashes";
 }
 
 export const QUESTS: QuestDef[] = [
@@ -435,7 +472,7 @@ export const QUESTS: QuestDef[] = [
     title: "Silberblatt für Lira",
     giver: "lira",
     offer:
-      "Die Salbe für die Holzfäller braucht Silberblatt. Vier Büschel, unzerdrückt. Heller Blattrand, westlich am Teich.",
+      "Die Salbe für die Holzfäller braucht Silberblatt. Vier Büschel, unzerdrückt. Heller Blattrand, westlich am Teich. Jeder Busch hebt deine Kräuterkunde.",
     progress: "Vier Büschel. Nicht mehr welk als du.",
     done: "Frisch genug. Das Wams ist ehrlich gewebt, kein Prunk.",
     objective: "Silberblatt",
@@ -451,13 +488,67 @@ export const QUESTS: QuestDef[] = [
     offer:
       "Sie nennen sich eine Kompanie. Sind aber Messer mit Stoff drum. Fünf am Ostrand, dann ist der Weg wieder ein Weg.",
     progress: "Fünf Schärpen. Der Weg wartet.",
-    done: "Gut. Die Wacht zahlt nicht in Liedern.",
+    done: "Gut. Die Wacht zahlt nicht in Liedern. Der Seitenweg nach Osten glimmt.",
     objective: "Rotschärpen",
     count: 5,
     xp: 150,
     gold: 140,
   },
+  {
+    id: "ashes",
+    title: "Aschengrund",
+    giver: "mara",
+    requires: "bandits",
+    offer:
+      "Vom Hauptweg führt ein Seitenweg nach Osten. Dort glimmt der Boden. Fünf Aschenläufer, bevor sie den Zaun erreichen.",
+    progress: "Fünf Aschenläufer. Der Ostweg ist noch warm.",
+    done: "Der Weg kühlt ab. Lira sagt, dort wächst etwas, das brennt, ohne Feuer zu sein.",
+    objective: "Aschenläufer",
+    count: 5,
+    xp: 220,
+    gold: 200,
+  },
+  {
+    id: "gluts",
+    title: "Glut am Wegrand",
+    giver: "lira",
+    requires: "ashes",
+    offer:
+      "Im Aschengrund wächst Glutkraut. Drei Büschel. Deine Kräuterkunde muss 20 sein, sonst beißt das Blatt zurück. Silberblatt übt die Hand.",
+    progress: "Drei Büschel Glutkraut. Nicht mit der bloßen Ungeduld.",
+    done: "Warm, aber nicht tot. Das reicht für die Salbe.",
+    objective: "Glutkraut",
+    count: 3,
+    xp: 180,
+    gold: 120,
+  },
 ];
+
+export const TALENT_LEVEL = 10;
+
+export interface TalentDef {
+  id: string;
+  name: string;
+  blurb: string;
+}
+
+export const TALENTS: Record<Spec, TalentDef[]> = {
+  klinge: [
+    { id: "wucht", name: "Wucht", blurb: "Dein normaler Schlag trifft härter." },
+    { id: "eisen", name: "Eisenhaut", blurb: "Mehr Rüstung." },
+    { id: "zorn", name: "Zorn", blurb: "Schläge füllen mehr Wut." },
+  ],
+  flamme: [
+    { id: "brand", name: "Brand", blurb: "Feuerball trifft härter." },
+    { id: "glut", name: "Nachglut", blurb: "Versengen brennt länger und heißer." },
+    { id: "eile", name: "Eile", blurb: "Zauber sind kürzer." },
+  ],
+  licht: [
+    { id: "gnade", name: "Gnade", blurb: "Heilung sitzt tiefer." },
+    { id: "hort", name: "Hort", blurb: "Schilde halten mehr." },
+    { id: "urteil", name: "Urteil", blurb: "Richtspruch trifft härter." },
+  ],
+};
 
 export function xpToNext(level: number) {
   return 55 + (level - 1) * 42 + (level - 1) * (level - 1) * 12;

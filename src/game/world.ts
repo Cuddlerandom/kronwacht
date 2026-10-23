@@ -95,6 +95,8 @@ function build() {
     pave(x, 31);
     pave(x, 32);
   }
+  for (let x = 17; x <= 29; x++) pave(x, 22);
+
   fill(13, 28, 6, 6, "d");
   fill(13, 35, 6, 3, "d");
   fill(24, 26, 6, 7, "d");
@@ -118,7 +120,11 @@ function build() {
   };
 
   for (const [x, y] of WOLF_TILES) clearSpot(x, y, 1);
+  for (const [x, y] of ASH_TILES) clearSpot(x, y, 1);
   for (const [x, y] of HERB_TILES) {
+    if (t[y]![x] === "w" || t[y]![x] === "t" || t[y]![x] === "r") set(x, y, "g");
+  }
+  for (const [x, y] of GLUT_TILES) {
     if (t[y]![x] === "w" || t[y]![x] === "t" || t[y]![x] === "r") set(x, y, "g");
   }
   clearSpot(12, 33, 0);
@@ -146,6 +152,14 @@ function build() {
       x: tileCenter(x, y).x,
       y: (y + 1) * TILE - 6,
       id: `herb-${i}`,
+    });
+  });
+  GLUT_TILES.forEach(([x, y], i) => {
+    props.push({
+      kind: "herb",
+      x: tileCenter(x, y).x,
+      y: (y + 1) * TILE - 6,
+      id: `glut-${i}`,
     });
   });
 
@@ -178,6 +192,21 @@ export const HERB_TILES: [number, number][] = [
   [8, 20],
   [6, 34],
   [10, 34],
+];
+
+export const ASH_TILES: [number, number][] = [
+  [23, 20],
+  [26, 19],
+  [28, 22],
+  [24, 23],
+  [27, 24],
+];
+
+export const GLUT_TILES: [number, number][] = [
+  [22, 18],
+  [29, 19],
+  [25, 21],
+  [30, 23],
 ];
 
 const built = build();
@@ -313,6 +342,7 @@ export function lineClear(x0: number, y0: number, x1: number, y1: number) {
 export function zoneName(x: number, y: number) {
   const tx = x / TILE;
   const ty = y / TILE;
+  if (tx >= 20 && ty >= 17 && ty <= 25) return "Aschengrund";
   if (ty >= 34.2) return "Friedhof von Lindenhain";
   if (tx >= 23.5 && ty >= 25 && ty <= 33.5) return "Ostrand";
   if (tx <= 11 && ty >= 18 && ty <= 34) return "Silberteich";
@@ -330,6 +360,8 @@ export function validateWorld() {
     ...WOLF_TILES.map(([x, y], i) => [`wolf${i}`, tileCenter(x, y).x, tileCenter(x, y).y] as [string, number, number]),
     ...BANDIT_TILES.map(([x, y], i) => [`bandit${i}`, tileCenter(x, y).x, tileCenter(x, y).y] as [string, number, number]),
     ...HERB_TILES.map(([x, y], i) => [`herb${i}`, tileCenter(x, y).x, tileCenter(x, y).y] as [string, number, number]),
+    ...ASH_TILES.map(([x, y], i) => [`ash${i}`, tileCenter(x, y).x, tileCenter(x, y).y] as [string, number, number]),
+    ...GLUT_TILES.map(([x, y], i) => [`glut${i}`, tileCenter(x, y).x, tileCenter(x, y).y] as [string, number, number]),
   ];
   for (const [name, x, y] of points) {
     if (!canStand(x, y)) errors.push(`${name} blocked`);

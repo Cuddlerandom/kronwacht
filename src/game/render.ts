@@ -19,6 +19,7 @@ export interface DrawActor {
   mark: "!" | "?" | null;
   selected: boolean;
   hitH: number;
+  tint?: "ash";
 }
 
 export interface DrawFloat {
@@ -44,6 +45,9 @@ export interface DrawModel {
   target: { x: number; y: number; hostile: boolean } | null;
   lowHp: boolean;
   sparkles: { x: number; y: number }[];
+  bolts: { x: number; y: number; ang: number; color: string }[];
+  slashes: { x: number; y: number; life: number }[];
+  rings: { x: number; y: number; r: number; max: number }[];
 }
 
 const INK = "#120e0a";
@@ -264,8 +268,44 @@ export function drawWorld(ctx: CanvasRenderingContext2D, m: DrawModel) {
 
   for (const f of m.floats) {
     ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
-    label(ctx, f.text, f.x, f.y, FLOATS[f.color], f.text.length > 12 ? 13 : 15);
+    label(ctx, f.text, f.x, f.y, FLOATS[f.color], f.text.length > 8 ? 13 : 18);
     ctx.globalAlpha = 1;
+  }
+
+  for (const b of m.bolts) {
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(b.ang);
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 11, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.ellipse(-14, 0, 9, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  for (const s of m.slashes) {
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.strokeStyle = PARCHMENT;
+    ctx.globalAlpha = Math.max(0, s.life / 0.22);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 16, -0.8, 0.9);
+    ctx.stroke();
+    ctx.restore();
+  }
+  for (const r of m.rings) {
+    ctx.save();
+    ctx.strokeStyle = "#ff8a2a";
+    ctx.globalAlpha = Math.max(0, 1 - r.r / r.max);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(r.x, r.y, r.r, r.r * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 
   ctx.restore();
@@ -282,12 +322,16 @@ export function drawWorld(ctx: CanvasRenderingContext2D, m: DrawModel) {
 }
 
 function paintProp(ctx: CanvasRenderingContext2D, p: Prop) {
+  ctx.save();
+  if (p.id?.startsWith("glut")) ctx.filter = "hue-rotate(-25deg) saturate(1.6) brightness(1.05)";
   if (p.kind === "rock" || p.kind === "herb" || p.kind === "barrel" || p.kind === "grave") {
     const index = { rock: 0, herb: 1, barrel: 2, grave: 3 }[p.kind];
     drawNamed(ctx, "props", p.x, p.y, HEIGHT[p.kind] ?? 70, index % 2, Math.floor(index / 2));
+    ctx.restore();
     return;
   }
   drawNamed(ctx, p.kind, p.x, p.y, HEIGHT[p.kind] ?? 80);
+  ctx.restore();
 }
 
 function paintActor(ctx: CanvasRenderingContext2D, a: DrawActor, time: number) {
@@ -303,6 +347,7 @@ function paintActor(ctx: CanvasRenderingContext2D, a: DrawActor, time: number) {
     ctx.translate(-a.x, -a.y);
   }
   if (a.ghost) ctx.globalAlpha = 0.5;
+  if (a.tint === "ash") ctx.filter = "sepia(0.7) saturate(0.35) brightness(0.82)";
   const y = a.y + bob;
   if (a.sprite === "hero") drawNamed(ctx, "hero", a.x, y, HEIGHT.hero ?? 112, a.frame % 4, a.dir);
   else if (a.sprite === "wolf") {
@@ -339,6 +384,13 @@ export function drawMinimap(
   for (const a of m.actors) {
     if (a.hostile || a.sprite === "hero") continue;
     ctx.fillRect(a.x * sx - 1.5, a.y * sy - 1.5, 3, 3);
+  }
+  ctx.fillStyle = GOLD;
+  ctx.font = "700 11px Georgia, serif";
+  ctx.textAlign = "center";
+  for (const a of m.actors) {
+    if (!a.mark) continue;
+    ctx.fillText(a.mark, a.x * sx, a.y * sy - 3);
   }
   if (player) {
     ctx.save();
