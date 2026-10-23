@@ -221,15 +221,16 @@
 .kw-frame,
 .kw-map,
 .kw-track,
-.kw-chat,
-.kw-bar,
 .kw-cast,
 .kw-hint,
-.kw-banner,
 .kw-sheet,
 .kw-stick,
 .kw-ghost,
-.kw-death {
+.kw-death,
+.kw-actions,
+.kw-spell,
+.kw-mini,
+.kw-tip {
   pointer-events: auto;
 }
 

@@ -112,6 +112,15 @@ export function GameScreen() {
   const stickId = useRef<number | null>(null);
   const hold = useRef(0);
   const suppressClick = useRef(false);
+  const lastTap = useRef(0);
+
+  const once = (run: () => void) => {
+    const now = performance.now();
+    if (now - lastTap.current < 350) return;
+    lastTap.current = now;
+    unlock();
+    run();
+  };
 
   useEffect(() => {
     boot();
@@ -426,24 +435,30 @@ export function GameScreen() {
                   type="button"
                   className={spell.oom ? "kw-spell is-oom" : "kw-spell"}
                   disabled={hud.dead || hud.ghost}
-                  onPointerDown={(e) => {
-                    unlock();
+                  onPointerDown={() => {
                     suppressClick.current = false;
                     window.clearTimeout(hold.current);
                     hold.current = window.setTimeout(() => {
                       suppressClick.current = true;
                       setTip({ name: spell.name, desc: spell.desc });
-                    }, 420);
+                    }, 480);
                   }}
-                  onPointerUp={() => window.clearTimeout(hold.current)}
-                  onPointerCancel={() => window.clearTimeout(hold.current)}
+                  onPointerUp={() => {
+                    window.clearTimeout(hold.current);
+                    if (suppressClick.current) {
+                      suppressClick.current = false;
+                      return;
+                    }
+                    setTip(null);
+                    once(() => pressSpell(index));
+                  }}
                   onClick={() => {
                     if (suppressClick.current) {
                       suppressClick.current = false;
                       return;
                     }
                     setTip(null);
-                    pressSpell(index);
+                    once(() => pressSpell(index));
                   }}
                 >
                   {hud.art && <span className={`kw-ico i${spell.icon}`} />}
@@ -452,13 +467,13 @@ export function GameScreen() {
                   <span className="kw-key">{index + 1}</span>
                 </button>
               ))}
-              <button type="button" className="kw-mini" aria-label="Beutel" onClick={() => togglePanel("bag")}>
+              <button type="button" className="kw-mini" aria-label="Beutel" onPointerUp={() => once(() => togglePanel("bag"))} onClick={() => once(() => togglePanel("bag"))}>
                 <Backpack size={18} />
               </button>
-              <button type="button" className="kw-mini" aria-label="Held" onClick={() => togglePanel("char")}>
+              <button type="button" className="kw-mini" aria-label="Held" onPointerUp={() => once(() => togglePanel("char"))} onClick={() => once(() => togglePanel("char"))}>
                 <User size={18} />
               </button>
-              <button type="button" className="kw-mini" aria-label="Aufträge" onClick={() => togglePanel("quest")}>
+              <button type="button" className="kw-mini" aria-label="Aufträge" onPointerUp={() => once(() => togglePanel("quest"))} onClick={() => once(() => togglePanel("quest"))}>
                 <ScrollText size={18} />
               </button>
             </div>
